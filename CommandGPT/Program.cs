@@ -7,6 +7,8 @@ string appName = "CommandGPT";
 
 string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 string configDir = Path.Combine(homeDir, ".config", "CommandGPT");
+Directory.CreateDirectory(configDir);
+
 string apiKeyPath = Path.Combine(configDir, "apikey.txt");
 string initialPromptPath = Path.Combine(configDir, "prompt.json");
 string historyPath = Path.Combine(configDir, "history.jsonl");
@@ -30,7 +32,7 @@ if (File.Exists(initialPromptPath))
 }
 
 //
-// Load historical messages to give context to the network
+// Load all historical messages to give context to the network
 //
 List<HistoricMessage> history = new();
 if (File.Exists(historyPath))
@@ -41,7 +43,13 @@ if (File.Exists(historyPath))
         .ToList();
 }
 
-// string modelId = "gpt-3.5-turbo";
+//
+// Choose history to use - only the last 15 mins
+//
+var now = DateTimeOffset.Now;
+var historyToUse = history
+    .Where(message => (now - message.Timestamp).TotalMinutes <= 15)
+    .ToArray();
 
 //
 // Parse the prompt from the user
@@ -56,6 +64,7 @@ var promptMessage = new Message()
     Role = "user",
     Content = prompt
 };
+DateTimeOffset promptTimestamp = DateTimeOffset.Now;
 
 //
 // Build the request
@@ -63,7 +72,7 @@ var promptMessage = new Message()
 var requestData = new Request()
 {
     ModelId = "gpt-3.5-turbo",
-    Messages = initialPrompt.Concat(new[] { promptMessage }).ToArray()
+    Messages = initialPrompt.Concat(historyToUse.Select(x => x.Message)).Concat(new[] { promptMessage }).ToArray()
 };
 var requestJson = JsonSerializer.Serialize(requestData);
 
@@ -94,6 +103,22 @@ var choice = choices[0];
 var responseMessage = choice.Message;
 var responseText = responseMessage.Content.Trim();
 Console.WriteLine(responseText);
+
+//
+// Add it to the history
+//
+history.Add(new HistoricMessage()
+{
+    Timestamp = promptTimestamp,
+    Message = promptMessage,
+});
+history.Add(new HistoricMessage()
+{
+    Timestamp = DateTimeOffset.Now,
+    Message = responseMessage,
+});
+history = history.Skip(Math.Max(0, history.Count - 100)).ToList();
+await File.WriteAllLinesAsync(historyPath, history.Select(message => JsonSerializer.Serialize(message)));
 
 //
 // Fini
@@ -170,4 +195,6 @@ class HistoricMessage
 {
     [JsonPropertyName("timestamp")]
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.Now;
+    [JsonPropertyName("message")]
+    public Message Message { get; set; } = new();
 }
