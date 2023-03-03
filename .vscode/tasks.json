@@ -7,7 +7,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/CommandGPT/CommandGPT.csproj",
+                "${workspaceFolder}/AskGPT/AskGPT.csproj",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary"
             ],
@@ -19,7 +19,7 @@
             "type": "process",
             "args": [
                 "publish",
-                "${workspaceFolder}/CommandGPT/CommandGPT.csproj",
+                "${workspaceFolder}/AskGPT/AskGPT.csproj",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary"
             ],
@@ -33,7 +33,7 @@
                 "watch",
                 "run",
                 "--project",
-                "${workspaceFolder}/CommandGPT/CommandGPT.csproj"
+                "${workspaceFolder}/AskGPT/AskGPT.csproj"
             ],
             "problemMatcher": "$msCompile"
         }

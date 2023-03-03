@@ -3,10 +3,10 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-string appName = "CommandGPT";
+string appName = "AskGPT";
 
 string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-string configDir = Path.Combine(homeDir, ".config", "CommandGPT");
+string configDir = Path.Combine(homeDir, ".config", "AskGPT");
 Directory.CreateDirectory(configDir);
 
 string apiKeyPath = Path.Combine(configDir, "apikey.txt");
