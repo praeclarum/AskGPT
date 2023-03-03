@@ -1,5 +1,7 @@
 # CommandGPT
 
+[![Build](https://github.com/praeclarum/CommandGPT/actions/workflows/build.yml/badge.svg)](https://github.com/praeclarum/CommandGPT/actions/workflows/build.yml)
+
 Ask Chat GPT questions from the command line!
 
 ## Usage
