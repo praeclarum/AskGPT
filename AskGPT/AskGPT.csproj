@@ -2,14 +2,12 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <AssemblyName>ask</AssemblyName>
     <TargetFramework>net7.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <PublishTrimmed>true</PublishTrimmed>
-    <TrimMode>partial</TrimMode>
-    <PublishSingleFile>true</PublishSingleFile>
-    <PublishReadyToRun>false</PublishReadyToRun>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>ask</ToolCommandName>
+    <PackageOutputPath>.\PackageOutput</PackageOutputPath>
   </PropertyGroup>
 
 </Project>
