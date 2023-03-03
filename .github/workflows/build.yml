@@ -23,4 +23,9 @@ jobs:
     - name: Build
       run: dotnet build --no-restore -c Release
     - name: Publish
-      run: dotnet publish --no-build -c Release
+      run: dotnet publish --no-build -c Release -r linux-x64
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: ask-linux-x64
+        path: bin/Release/net7.0/publish/
