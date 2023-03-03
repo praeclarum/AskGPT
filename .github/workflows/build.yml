@@ -28,4 +28,4 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: ask-linux-x64
-        path: bin/Release/net7.0/publish/
+        path: AskGPT/bin/Release/net7.0/linux-x64/publish
