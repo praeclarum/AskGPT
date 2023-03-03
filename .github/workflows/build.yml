@@ -23,15 +23,15 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
-      run: dotnet build --no-restore -c Release -p:Version=$VERSION
+      run: dotnet build --no-restore -c Release -p:Version=${{ env.VERSION }}
     - name: Publish
       if: github.event_name == 'workflow_dispatch'
-      run: dotnet publish --no-build -c Release -r linux-x64 -p:Version=$VERSION
+      run: dotnet publish --no-build -c Release -r linux-x64 -p:Version=${{ env.VERSION }}
     - name: Upload artifact
       if: github.event_name == 'workflow_dispatch'
       uses: actions/upload-artifact@v2
       with:
-        name: ask-$VERSION-linux-x64
+        name: ask-${{ env.VERSION }}-linux-x64
         path: AskGPT/bin/Release/net7.0/linux-x64/publish
 
   build_windows:
@@ -47,13 +47,13 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
-      run: dotnet build --no-restore -c Release -p:Version=$VERSION
+      run: dotnet build --no-restore -c Release -p:Version=${{ env.VERSION }}
     - name: Publish
-      run: dotnet publish --no-build -c Release -r win-x64 -p:Version=$VERSION
+      run: dotnet publish --no-build -c Release -r win-x64 -p:Version=${{ env.VERSION }}
     - name: Upload artifact
       uses: actions/upload-artifact@v2
       with:
-        name: ask-$VERSION-win-x64
+        name: ask-${{ env.VERSION }}-win-x64
         path: AskGPT\bin\Release\net7.0\win-x64\publish
 
   build_mac:
@@ -69,11 +69,11 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
-      run: dotnet build --no-restore -c Release -p:Version=$VERSION
+      run: dotnet build --no-restore -c Release -p:Version=${{ env.VERSION }}
     - name: Publish
-      run: dotnet publish --no-build -c Release -r osx-x64 -p:Version=$VERSION
+      run: dotnet publish --no-build -c Release -r osx-x64 -p:Version=${{ env.VERSION }}
     - name: Upload artifact
       uses: actions/upload-artifact@v2
       with:
-        name: ask-$VERSION-macos-x64
+        name: ask-${{ env.VERSION }}-macos-x64
         path: AskGPT/bin/Release/net7.0/osx-x64/publish
