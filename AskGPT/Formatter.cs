@@ -19,6 +19,12 @@ class Formatter
         OneTick,
         TwoTick,
         ThreeTick,
+        OneDoubleQuote,
+        OneDoubleQuoteInterior,
+        TwoDoubleQuote,
+        ThreeDoubleQuoteInterior,
+        ThreeDoubleQuoteInteriorOneDoubleQuote,
+        ThreeDoubleQuoteInteriorTwoDoubleQuote,
         Finished,
     }
 
@@ -54,7 +60,7 @@ class Formatter
     {
         for (var i = 0; i < markdown.Length; i++) {
             while (!Run(markdown[i])) {
-                // Do nothing
+                // Keep running until we've consumed the character
             }
         }
     }
@@ -138,6 +144,14 @@ class Formatter
             case TokenState.Number:
                 Write(tokenText, TokenFormat.Number);
                 break;
+            case TokenState.OneDoubleQuote:
+            case TokenState.OneDoubleQuoteInterior:
+            case TokenState.TwoDoubleQuote:
+            case TokenState.ThreeDoubleQuoteInterior:
+            case TokenState.ThreeDoubleQuoteInteriorOneDoubleQuote:
+            case TokenState.ThreeDoubleQuoteInteriorTwoDoubleQuote:
+                Write(tokenText, TokenFormat.String);
+                break;            
             case TokenState.OneTick:
             case TokenState.TwoTick:
             case TokenState.ThreeTick:
@@ -206,6 +220,10 @@ class Formatter
                         case '`':
                             token.Append(ch);
                             state = TokenState.OneTick;
+                            break;
+                        case '"':
+                            token.Append(ch);
+                            state = TokenState.OneDoubleQuote;
                             break;
                         case '#':
                             token.Append(ch);
@@ -306,6 +324,55 @@ class Formatter
                 else {
                     return true;
                 }
+            case TokenState.OneDoubleQuote:
+                token.Append(ch);
+                if (ch == '"') {
+                    state = TokenState.TwoDoubleQuote;
+                }
+                else {
+                    state = TokenState.OneDoubleQuoteInterior;
+                }
+                return true;
+            case TokenState.OneDoubleQuoteInterior:
+                token.Append(ch);
+                if (ch == '"') {
+                    EndToken();
+                }
+                return true;
+            case TokenState.TwoDoubleQuote:
+                if (ch == '"') {
+                    token.Append(ch);
+                    state = TokenState.ThreeDoubleQuoteInterior;
+                    return true;
+                }
+                else {
+                    EndToken();
+                    return false;
+                }
+            case TokenState.ThreeDoubleQuoteInterior:
+                token.Append(ch);
+                if (ch == '"') {
+                    state = TokenState.ThreeDoubleQuoteInteriorOneDoubleQuote;
+                }
+                return true;
+            case TokenState.ThreeDoubleQuoteInteriorOneDoubleQuote:
+                token.Append(ch);
+                if (ch == '"') {
+                    state = TokenState.ThreeDoubleQuoteInteriorTwoDoubleQuote;
+                }
+                else {
+                    state = TokenState.ThreeDoubleQuoteInterior;
+                }
+                return true;
+            case TokenState.ThreeDoubleQuoteInteriorTwoDoubleQuote:
+                token.Append(ch);
+                if (ch == '"') {
+                    EndToken();
+                }
+                else {
+                    state = TokenState.ThreeDoubleQuoteInterior;
+                }
+                return true;
             default:
                 throw new NotImplementedException($"Unknown state {state}");
         }
@@ -316,6 +383,7 @@ enum TokenFormat {
     Markdown,
     Body,
     Number,
+    String,
     Identifier,
     Keyword,
     Function,
@@ -354,6 +422,9 @@ class FormattedWriter
                 Console.ForegroundColor = ConsoleColor.Green;
                 break;
             case TokenFormat.Number:
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                break;
+            case TokenFormat.String:
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 break;
             case TokenFormat.Operator:
