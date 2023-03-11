@@ -23,6 +23,7 @@ class Formatter
 
     enum ContextType {
         Text,
+        InlineCode,
         Code = 1000,
         PythonCode,
     }
@@ -230,6 +231,12 @@ class Formatter
                 }
                 else {
                     EndToken();
+                    if (CurrentContextType == ContextType.InlineCode) {
+                        EndContext();
+                    }
+                    else {
+                        BeginContext(ContextType.InlineCode);
+                    }
                     return false;
                 }
             case TokenState.TwoTick:
