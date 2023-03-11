@@ -11,7 +11,7 @@
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
             "program": "${workspaceFolder}/AskGPT/bin/Debug/net7.0/AskGPT.dll",
-            "args": [],
+            "args": ["how are you doing today?"],
             "cwd": "${workspaceFolder}/AskGPT",
             // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
             "console": "internalConsole",

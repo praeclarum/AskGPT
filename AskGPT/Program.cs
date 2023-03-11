@@ -72,7 +72,8 @@ DateTimeOffset promptTimestamp = DateTimeOffset.Now;
 var requestData = new Request()
 {
     ModelId = "gpt-3.5-turbo",
-    Messages = initialPrompt.Concat(historyToUse.Select(x => x.Message)).Concat(new[] { promptMessage }).ToArray()
+    Messages = initialPrompt.Concat(historyToUse.Select(x => x.Message)).Concat(new[] { promptMessage }).ToArray(),
+    Stream = true,
 };
 var requestJson = JsonSerializer.Serialize(requestData);
 
@@ -83,26 +84,29 @@ var http = new HttpClient();
 var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
 request.Headers.Add("Authorization", $"Bearer {apiKey}");
 request.Content = new StringContent(requestJson, System.Text.Encoding.UTF8, "application/json");
-var response = http.Send(request);
-var responseJson = await response.Content.ReadAsStringAsync();
+var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 if (!response.IsSuccessStatusCode)
 {
-    Error($"Request failed with status code {(int)response.StatusCode} {response.StatusCode}:\n\n{responseJson}");
+    Error($"Request failed with status code {response.StatusCode}:\n\n{await response.Content.ReadAsStringAsync()}");
 }
-var responseData = JsonSerializer.Deserialize<Response>(responseJson);
-var choices = responseData?.Choices ?? Array.Empty<Choice>();
-if (choices.Length == 0)
-{
-    Error($"No choices were returned by the API.");
+string responseText = "";
+using (var s = await response.Content.ReadAsStreamAsync()) {
+    using (var sr = new StreamReader(s)) {
+        while (!sr.EndOfStream) {
+            var line = await sr.ReadLineAsync() ?? "";
+            if (line.StartsWith("data: {")) {
+                var deltaJson = line.Substring("data: ".Length);
+                var delta = JsonSerializer.Deserialize<Response>(deltaJson);
+                var content = delta?.Choices[0].Delta?.Content ?? "";
+                responseText += content;
+                OutputStreamedResponse(content);
+            }
+            else if (line.StartsWith("data: [DONE]")) {
+                break;
+            }
+        }
+    }
 }
-
-//
-// Print the response
-//
-var choice = choices[0];
-var responseMessage = choice.Message;
-var responseText = responseMessage.Content.Trim();
-Console.WriteLine(responseText);
 
 //
 // Add it to the history
@@ -115,7 +119,11 @@ history.Add(new HistoricMessage()
 history.Add(new HistoricMessage()
 {
     Timestamp = DateTimeOffset.Now,
-    Message = responseMessage,
+    Message = new Message
+    {
+        Role = "assistant",
+        Content = responseText,
+    }
 });
 history = history.Skip(Math.Max(0, history.Count - 100)).ToList();
 await File.WriteAllLinesAsync(historyPath, history.Select(message => JsonSerializer.Serialize(message)));
@@ -124,6 +132,10 @@ await File.WriteAllLinesAsync(historyPath, history.Select(message => JsonSeriali
 // Fini
 //
 return 0;
+
+void OutputStreamedResponse(string text) {
+    Console.Write(text);
+}
 
 static void Error(string message)
 {
@@ -139,6 +151,8 @@ class Request
     public string ModelId { get; set; } = "";
     [JsonPropertyName("messages")]
     public Message[] Messages { get; set; } = Array.Empty<Message>();
+    [JsonPropertyName("stream")]
+    public bool Stream { get; set; }
 }
 
 class Response
@@ -160,9 +174,11 @@ class Choice
     [JsonPropertyName("index")]
     public int Index { get; set; }
     [JsonPropertyName("message")]
-    public Message Message { get; set; } = new();
+    public Message? Message { get; set; }
+    [JsonPropertyName("delta")]
+    public Message? Delta { get; set; }
     [JsonPropertyName("finish_reason")]
-    public string FinishReason { get; set; } = "";
+    public string? FinishReason { get; set; }
 }
 
 class Error
