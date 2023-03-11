@@ -39,10 +39,13 @@ class Formatter
         PythonCode,
     }
 
+    static readonly HashSet<string> codeKeywords;
+    static readonly HashSet<string> codeValwords;
+
     static readonly HashSet<string> csharpKeywords = new() {
         "and", "as",
         "break", "byte",
-        "catch", "class",
+        "case", "catch", "class",
         "do", "double",
         "else",
         "finally", "float", "for", "from",
@@ -51,8 +54,11 @@ class Formatter
         "lock", "long",
         "new", "not",
         "or",
+        "private", "protected", "public",
         "return",
+        "short", "static", "string", "struct", "switch",
         "try",
+        "var", "void",
         "while", "with",
     };
     static readonly HashSet<string> csharpValwords = new() {
@@ -71,12 +77,21 @@ class Formatter
         "not",
         "or",
         "return",
+        "switch",
         "try",
         "while", "with",
     };
     static readonly HashSet<string> pythonValwords = new() {
         "True", "False", "None",
     };
+
+    static Formatter()
+    {
+        codeKeywords = new HashSet<string>(csharpKeywords);
+        codeKeywords.UnionWith(pythonKeywords);
+        codeValwords = new HashSet<string>(csharpValwords);
+        codeValwords.UnionWith(pythonValwords);
+    }
 
     public Formatter() {
         contextStack.Push(ContextType.Text);
@@ -110,7 +125,8 @@ class Formatter
     }
     ContextType CurrentContextType => contextStack.Peek();
 
-    bool InCode => CurrentContextType >= ContextType.Code;
+    bool InCode => CurrentContextType == ContextType.Code;
+    bool InCodeish => CurrentContextType >= ContextType.Code;
     bool InCFamilyCode => CurrentContextType == ContextType.CSharpCode;
     bool InUnixScriptCode => CurrentContextType == ContextType.PythonCode;
 
@@ -162,6 +178,10 @@ class Formatter
                 switch (CurrentContextType) {
                     case ContextType.Text:
                         Write(tokenText, TokenFormat.Body);
+                        break;
+                    case ContextType.Code:
+                        Write(tokenText, codeKeywords.Contains(tokenText) ? TokenFormat.Keyword 
+                            : (codeValwords.Contains(tokenText) ? TokenFormat.Valword : TokenFormat.Identifier));
                         break;
                     case ContextType.CSharpCode:
                         Write(tokenText, csharpKeywords.Contains(tokenText) ? TokenFormat.Keyword 
@@ -278,7 +298,7 @@ class Formatter
                             }
                             break;
                         case '#':
-                            if (InUnixScriptCode) {
+                            if (InUnixScriptCode || InCode) {
                                 token.Append(ch);
                                 state = TokenState.LineComment;
                             }
@@ -452,7 +472,7 @@ class Formatter
                 }
                 return true;
             case TokenState.OneForwardSlash:
-                if (ch == '/' && InCFamilyCode) {
+                if (ch == '/' && (InCFamilyCode || InCode)) {
                     token.Append(ch);
                     state = TokenState.LineComment;
                 }
