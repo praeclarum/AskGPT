@@ -6,6 +6,7 @@ class Formatter
 {
     int bracketDepth = 0;
     TokenState state = TokenState.Trivia;
+    Stack<ContextType> contextStack = new();
     readonly StringBuilder token = new StringBuilder();
     readonly FormattedWriter writer = new FormattedWriter();
 
@@ -20,9 +21,32 @@ class Formatter
         Finished,
     }
 
-    static readonly Dictionary<string, HashSet<string>> keywordsForProgrammingLanguage = new() {
-        { "python", new() { "class", "def", "if", "import", "return", "while", "for", "break" } },
+    enum ContextType {
+        Text,
+        Code = 1000,
+        PythonCode,
+    }
+
+    static readonly HashSet<string> pythonKeywords = new() {
+        "and", "as", "assert",
+        "break",
+        "class", "def",
+        "for",
+        "if", "import", "in", "is",
+        "lambda",
+        "not",
+        "or",
+        "return",
+        "while",
     };
+
+    static readonly Dictionary<string, HashSet<string>> keywordsForProgrammingLanguage = new() {
+        { "python", pythonKeywords },
+    };
+
+    public Formatter() {
+        contextStack.Push(ContextType.Text);
+    }
     
     public void Append(string markdown)
     {
@@ -35,30 +59,84 @@ class Formatter
 
     public void Finish()
     {
-        EndToken();
-        state = TokenState.Finished;
+        if (state != TokenState.Finished) {
+            EndToken();
+            FlushWriteBuffer();
+            state = TokenState.Finished;
+        }
+    }
+
+    void BeginContext(ContextType contextType)
+    {
+        contextStack.Push(contextType);
+    }
+    void EndContext()
+    {
+        contextStack.Pop();
+    }
+    ContextType CurrentContextType => contextStack.Peek();
+
+    List<(string text, TokenFormat format)> writeBuffer = new();
+
+    void Write(string text, TokenFormat format)
+    {
+        if (format == TokenFormat.Identifier) {
+            writeBuffer.Add((text, format));
+        }
+        else if (text == ".") {
+            writeBuffer.Add((text, format));
+        }
+        else if (text == "(" && writeBuffer.Count > 0 && writeBuffer[^1].format == TokenFormat.Identifier) {
+            var (lastText, lastFormat) = writeBuffer[^1];
+            writeBuffer[^1] = (lastText, TokenFormat.Function);
+            FlushWriteBuffer();
+            writer.Write(text, format);
+        }
+        else {
+            FlushWriteBuffer();
+            writer.Write(text, format);
+        }
+    }
+
+    void FlushWriteBuffer()
+    {
+        foreach (var (text, format) in writeBuffer) {
+            writer.Write(text, format);
+        }
+        writeBuffer.Clear();
     }
 
     void EndToken()
     {
+        var tokenText = token.ToString();
         switch (state) {
             case TokenState.Unknown:
                 break;
             case TokenState.Finished:
                 break;
             case TokenState.Trivia:
-                writer.Write(token.ToString(), TokenFormat.Body);                
+                Write(tokenText, TokenFormat.Body);                
                 break;
             case TokenState.Word:
-                writer.Write(token.ToString(), TokenFormat.Body);
+                switch (CurrentContextType) {
+                    case ContextType.Text:
+                        Write(tokenText, TokenFormat.Body);
+                        break;
+                    case ContextType.PythonCode:
+                        Write(tokenText, pythonKeywords.Contains(tokenText) ? TokenFormat.Keyword : TokenFormat.Identifier);
+                        break;
+                    default:
+                        Write(tokenText, TokenFormat.Identifier);
+                        break;
+                }
                 break;
             case TokenState.Number:
-                writer.Write(token.ToString(), TokenFormat.Number);
+                Write(tokenText, TokenFormat.Number);
                 break;
             case TokenState.OneTick:
             case TokenState.TwoTick:
             case TokenState.ThreeTick:
-                writer.Write(token.ToString(), TokenFormat.Markdown);
+                Write(tokenText, TokenFormat.Markdown);
                 break;            
             default:
                 throw new NotImplementedException($"Cannot end state {state}");
@@ -92,18 +170,18 @@ class Formatter
                         case ':':
                         case '!':
                         case '?':
-                            writer.Write(ch.ToString(), TokenFormat.Punctuation);
+                            Write(ch.ToString(), TokenFormat.Punctuation);
                             break;
                         case '(':
                         case '[':
                         case '{':
                             bracketDepth++;
-                            writer.Write(ch.ToString(), TokenFormat.Bracket + bracketDepth);
+                            Write(ch.ToString(), TokenFormat.Bracket + bracketDepth);
                             break;
                         case ')':
                         case ']':
                         case '}':
-                            writer.Write(ch.ToString(), TokenFormat.Bracket + bracketDepth);
+                            Write(ch.ToString(), TokenFormat.Bracket + bracketDepth);
                             bracketDepth--;
                             break;
                         case '`':
@@ -167,7 +245,24 @@ class Formatter
             case TokenState.ThreeTick:
                 token.Append(ch);
                 if (ch == '\n') {
+                    var tokenText = token.ToString().Trim();
                     EndToken();
+                    if (CurrentContextType >= ContextType.Code) {
+                        EndContext();
+                    }
+                    else {
+                        switch (tokenText) {
+                            case "```python":
+                            case "``` python":
+                            case "```py":
+                            case "``` py":
+                                BeginContext(ContextType.PythonCode);
+                                break;
+                            default:
+                                BeginContext(ContextType.Code);
+                                break;
+                        }
+                    }
                     return true;
                 }
                 else {
@@ -183,6 +278,9 @@ enum TokenFormat {
     Markdown,
     Body,
     Number,
+    Identifier,
+    Keyword,
+    Function,
     Punctuation,
     Bracket = 1000,
 }
@@ -190,9 +288,9 @@ enum TokenFormat {
 class FormattedWriter
 {
     ConsoleColor[] bracketColors = new ConsoleColor[] {
-        ConsoleColor.Yellow,
-        ConsoleColor.Magenta,
-        ConsoleColor.Cyan
+        ConsoleColor.DarkYellow,
+        ConsoleColor.DarkMagenta,
+        ConsoleColor.DarkCyan
     };
     public void Write(string token, TokenFormat format)
     {
@@ -201,9 +299,19 @@ class FormattedWriter
                 Console.ForegroundColor = ConsoleColor.DarkGray;
                 break;
             case TokenFormat.Body:
+                Console.ResetColor();
+                break;
+            case TokenFormat.Keyword:
+                Console.ForegroundColor = ConsoleColor.Magenta;
+                break;
+            case TokenFormat.Identifier:
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                break;
+            case TokenFormat.Function:
+                Console.ForegroundColor = ConsoleColor.Green;
                 break;
             case TokenFormat.Number:
-                Console.ForegroundColor = ConsoleColor.DarkYellow;
+                Console.ForegroundColor = ConsoleColor.Yellow;
                 break;
             case TokenFormat.Punctuation:
                 Console.ForegroundColor = ConsoleColor.Gray;
@@ -219,6 +327,5 @@ class FormattedWriter
                 break;
         }
         Console.Write(token);
-        Console.ResetColor();
     }
 }
