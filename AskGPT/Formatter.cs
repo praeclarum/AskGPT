@@ -27,6 +27,7 @@ class Formatter
         ThreeDoubleQuoteInteriorTwoDoubleQuote,
         OneSingleQuote,
         OneSingleQuoteInterior,
+        OneForwardSlash,
         Finished,
     }
 
@@ -34,8 +35,29 @@ class Formatter
         Text,
         InlineCode,
         Code = 1000,
+        CSharpCode,
         PythonCode,
     }
+
+    static readonly HashSet<string> csharpKeywords = new() {
+        "and", "as",
+        "break", "byte",
+        "catch", "class",
+        "do", "double",
+        "else",
+        "finally", "float", "for", "from",
+        "global", "goto", 
+        "if", "is", "in", "int",
+        "lock", "long",
+        "new", "not",
+        "or",
+        "return",
+        "try",
+        "while", "with",
+    };
+    static readonly HashSet<string> csharpValwords = new() {
+        "true", "false", "null",
+    };
 
     static readonly HashSet<string> pythonKeywords = new() {
         "and", "as", "assert",
@@ -88,6 +110,10 @@ class Formatter
     }
     ContextType CurrentContextType => contextStack.Peek();
 
+    bool InCode => CurrentContextType >= ContextType.Code;
+    bool InCFamilyCode => CurrentContextType == ContextType.CSharpCode;
+    bool InUnixScriptCode => CurrentContextType == ContextType.PythonCode;
+
     List<(string text, TokenFormat format)> writeBuffer = new();
 
     void Write(string text, TokenFormat format)
@@ -137,6 +163,10 @@ class Formatter
                     case ContextType.Text:
                         Write(tokenText, TokenFormat.Body);
                         break;
+                    case ContextType.CSharpCode:
+                        Write(tokenText, csharpKeywords.Contains(tokenText) ? TokenFormat.Keyword 
+                            : (csharpValwords.Contains(tokenText) ? TokenFormat.Valword : TokenFormat.Identifier));
+                        break;
                     case ContextType.PythonCode:
                         Write(tokenText, pythonKeywords.Contains(tokenText) ? TokenFormat.Keyword 
                             : (pythonValwords.Contains(tokenText) ? TokenFormat.Valword : TokenFormat.Identifier));
@@ -163,7 +193,10 @@ class Formatter
             case TokenState.TwoTick:
             case TokenState.ThreeTick:
                 Write(tokenText, TokenFormat.Markdown);
-                break;            
+                break;
+            case TokenState.OneForwardSlash:
+                Write(tokenText, TokenFormat.Operator);
+                break;
             default:
                 throw new NotImplementedException($"Cannot end state {state}");
         }
@@ -214,7 +247,6 @@ class Formatter
                         case '+':
                         case '-':
                         case '*':
-                        case '/':
                         case '%':
                         case '&':
                         case '|':
@@ -232,6 +264,10 @@ class Formatter
                             token.Append(ch);
                             state = TokenState.OneDoubleQuote;
                             break;
+                        case '/':
+                            token.Append(ch);
+                            state = TokenState.OneForwardSlash;
+                            break;
                         case '\'':
                             if (CurrentContextType >= ContextType.Code) {
                                 token.Append(ch);
@@ -242,8 +278,13 @@ class Formatter
                             }
                             break;
                         case '#':
-                            token.Append(ch);
-                            state = TokenState.LineComment;
+                            if (InUnixScriptCode) {
+                                token.Append(ch);
+                                state = TokenState.LineComment;
+                            }
+                            else {
+                                Write("#", TokenFormat.Operator);
+                            }
                             break;
                         default:
                             token.Append(ch);
@@ -324,6 +365,12 @@ class Formatter
                     }
                     else {
                         switch (tokenText) {
+                            case "```csharp":
+                            case "``` csharp":
+                            case "```cs":
+                            case "``` cs":
+                                BeginContext(ContextType.CSharpCode);
+                                break;
                             case "```python":
                             case "``` python":
                             case "```py":
@@ -402,6 +449,16 @@ class Formatter
                 token.Append(ch);
                 if (ch == '\'') {
                     EndToken();
+                }
+                return true;
+            case TokenState.OneForwardSlash:
+                if (ch == '/' && InCFamilyCode) {
+                    token.Append(ch);
+                    state = TokenState.LineComment;
+                }
+                else {
+                    EndToken();
+                    return false;
                 }
                 return true;
             default:
