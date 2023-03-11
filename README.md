@@ -4,6 +4,7 @@
 
 Ask ChatGPT questions from the command line.
 
+<img width="793" alt="Screenshot 2023-03-11 at 7 45 30 AM Low" src="https://user-images.githubusercontent.com/323548/224495172-a3cc73fd-329b-4852-99eb-4e9e2dcb9d0f.png">
 
 ## Usage
 
