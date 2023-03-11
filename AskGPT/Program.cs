@@ -45,7 +45,7 @@ if (File.Exists(historyPath))
         .ToList();
 }
 
-if (true && history.Count > 61)
+if (false && history.Count > 61)
 {
     for (int i = 1; i <= 61; i += 2)
     {
