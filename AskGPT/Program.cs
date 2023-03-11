@@ -43,6 +43,15 @@ if (File.Exists(historyPath))
         .ToList();
 }
 
+if (true && history.Count >= 3)
+{
+    string lastText = history[^3].Message.Content;
+    var lastFormatter = new Formatter();
+    lastFormatter.Append(lastText);
+    lastFormatter.Finish();
+    return 0;
+}
+
 //
 // Choose history to use - only the last 15 mins
 //
@@ -100,7 +109,7 @@ using (var s = await response.Content.ReadAsStreamAsync()) {
                 var delta = JsonSerializer.Deserialize<Response>(deltaJson);
                 var content = delta?.Choices[0].Delta?.Content ?? "";
                 responseText += content;
-                formatter.Format(content);
+                formatter.Append(content);
             }
             else if (line.StartsWith("data: [DONE]")) {
                 break;
@@ -108,6 +117,7 @@ using (var s = await response.Content.ReadAsStreamAsync()) {
         }
     }
 }
+formatter.Finish();
 
 //
 // Add it to the history
