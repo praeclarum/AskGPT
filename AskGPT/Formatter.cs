@@ -6,9 +6,9 @@ class Formatter
 {
     int bracketDepth = 0;
     TokenState state = TokenState.WS;
-    Stack<ContextType> contextStack = new();
+    readonly Stack<FormatContext> contextStack = new();
     readonly StringBuilder token = new StringBuilder();
-    readonly FormattedWriter writer = new FormattedWriter();
+    readonly FormattedWriter writer = new ConsoleWriter();
 
     enum TokenState {
         Unknown,
@@ -31,14 +31,6 @@ class Formatter
         Finished,
     }
 
-    enum ContextType {
-        Text,
-        InlineCode,
-        Code = 1000,
-        CSharpCode,
-        PythonCode,
-    }
-
     static readonly HashSet<string> codeKeywords;
     static readonly HashSet<string> codeValwords;
 
@@ -51,7 +43,7 @@ class Formatter
         "finally", "float", "for", "from",
         "global", "goto", 
         "if", "is", "in", "int",
-        "lock", "long",
+        "let", "lock", "long",
         "new", "not",
         "or",
         "private", "protected", "public",
@@ -94,7 +86,7 @@ class Formatter
     }
 
     public Formatter() {
-        contextStack.Push(ContextType.Text);
+        contextStack.Push(FormatContext.Text);
     }
     
     public void Append(string markdown)
@@ -111,24 +103,30 @@ class Formatter
         if (state != TokenState.Finished) {
             EndToken();
             FlushWriteBuffer();
+            while (contextStack.Count > 1) {
+                EndContext();
+            }
+            writer.Finish();
             state = TokenState.Finished;
         }
     }
 
-    void BeginContext(ContextType contextType)
+    void BeginContext(FormatContext contextType)
     {
         contextStack.Push(contextType);
+        writer.BeginContext(contextType);
     }
     void EndContext()
     {
         contextStack.Pop();
+        writer.EndContext();
     }
-    ContextType CurrentContextType => contextStack.Peek();
+    FormatContext CurrentContextType => contextStack.Peek();
 
-    bool InCode => CurrentContextType == ContextType.Code;
-    bool InCodeish => CurrentContextType >= ContextType.Code;
-    bool InCFamilyCode => CurrentContextType == ContextType.CSharpCode;
-    bool InUnixScriptCode => CurrentContextType == ContextType.PythonCode;
+    bool InCode => CurrentContextType == FormatContext.Code;
+    bool InCodeish => CurrentContextType >= FormatContext.Code;
+    bool InCFamilyCode => CurrentContextType == FormatContext.CSharpCode;
+    bool InUnixScriptCode => CurrentContextType == FormatContext.PythonCode;
 
     List<(string text, TokenFormat format)> writeBuffer = new();
 
@@ -176,18 +174,18 @@ class Formatter
                 break;
             case TokenState.Word:
                 switch (CurrentContextType) {
-                    case ContextType.Text:
+                    case FormatContext.Text:
                         Write(tokenText, TokenFormat.Body);
                         break;
-                    case ContextType.Code:
+                    case FormatContext.Code:
                         Write(tokenText, codeKeywords.Contains(tokenText) ? TokenFormat.Keyword 
                             : (codeValwords.Contains(tokenText) ? TokenFormat.Valword : TokenFormat.Identifier));
                         break;
-                    case ContextType.CSharpCode:
+                    case FormatContext.CSharpCode:
                         Write(tokenText, csharpKeywords.Contains(tokenText) ? TokenFormat.Keyword 
                             : (csharpValwords.Contains(tokenText) ? TokenFormat.Valword : TokenFormat.Identifier));
                         break;
-                    case ContextType.PythonCode:
+                    case FormatContext.PythonCode:
                         Write(tokenText, pythonKeywords.Contains(tokenText) ? TokenFormat.Keyword 
                             : (pythonValwords.Contains(tokenText) ? TokenFormat.Valword : TokenFormat.Identifier));
                         break;
@@ -289,7 +287,7 @@ class Formatter
                             state = TokenState.OneForwardSlash;
                             break;
                         case '\'':
-                            if (CurrentContextType >= ContextType.Code) {
+                            if (CurrentContextType >= FormatContext.Code) {
                                 token.Append(ch);
                                 state = TokenState.OneSingleQuote;
                             }
@@ -357,11 +355,11 @@ class Formatter
                 }
                 else {
                     EndToken();
-                    if (CurrentContextType == ContextType.InlineCode) {
+                    if (CurrentContextType == FormatContext.InlineCode) {
                         EndContext();
                     }
                     else {
-                        BeginContext(ContextType.InlineCode);
+                        BeginContext(FormatContext.InlineCode);
                     }
                     return false;
                 }
@@ -380,7 +378,7 @@ class Formatter
                 if (ch == '\n') {
                     var tokenText = token.ToString().Trim();
                     EndToken();
-                    if (CurrentContextType >= ContextType.Code) {
+                    if (CurrentContextType >= FormatContext.Code) {
                         EndContext();
                     }
                     else {
@@ -389,16 +387,16 @@ class Formatter
                             case "``` csharp":
                             case "```cs":
                             case "``` cs":
-                                BeginContext(ContextType.CSharpCode);
+                                BeginContext(FormatContext.CSharpCode);
                                 break;
                             case "```python":
                             case "``` python":
                             case "```py":
                             case "``` py":
-                                BeginContext(ContextType.PythonCode);
+                                BeginContext(FormatContext.PythonCode);
                                 break;
                             default:
-                                BeginContext(ContextType.Code);
+                                BeginContext(FormatContext.Code);
                                 break;
                         }
                     }
@@ -502,19 +500,60 @@ enum TokenFormat {
     Bracket = 1000,
 }
 
-class FormattedWriter
+enum FormatContext {
+    Text,
+    InlineCode,
+    Code = 1000,
+    CSharpCode,
+    PythonCode,
+}
+
+static class FormatContextExtensions
 {
+    public static bool IsCodeish(this FormatContext contextType)
+    {
+        return contextType >= FormatContext.Code;
+    }
+    public static bool IsCode(this FormatContext contextType)
+    {
+        return contextType == FormatContext.Code;
+    }
+}
+
+abstract class FormattedWriter
+{
+    readonly Stack<FormatContext> contextStack = new();
+    protected FormattedWriter()
+    {
+        contextStack.Push(FormatContext.Text);        
+    }
+    public void BeginContext(FormatContext contextType)
+    {
+        contextStack.Push(contextType);
+    }
+    public void EndContext()
+    {
+        contextStack.Pop();
+    }
+    public FormatContext CurrentContextType => contextStack.Peek();
+    public abstract void Write(string token, TokenFormat format);
+    public virtual void Finish() {}
+}
+
+class ConsoleWriter : FormattedWriter
+{
+    readonly int width = Console.WindowWidth;
+    int column = 0;
     ConsoleColor[] bracketColors = new ConsoleColor[] {
         ConsoleColor.DarkYellow,
         ConsoleColor.DarkMagenta,
         ConsoleColor.DarkCyan
     };
-    public void Write(string token, TokenFormat format)
+    public override void Write(string token, TokenFormat format)
     {
         switch (format) {
             case TokenFormat.Markdown:
-                Console.ForegroundColor = ConsoleColor.DarkGray;
-                break;
+                return;
             case TokenFormat.Body:
                 Console.ResetColor();
                 break;
@@ -555,6 +594,44 @@ class FormattedWriter
                 }
                 break;
         }
-        Console.Write(token);
+        if (CurrentContextType.IsCodeish()) {
+            // Console.BackgroundColor = ConsoleColor.DarkGray;
+            var newlineIndex = token.LastIndexOf('\n');
+            column = newlineIndex >= 0 ? token.Length - newlineIndex - 1 : column + token.Length;
+            Console.Write(token);
+        }
+        else {
+            // Console.BackgroundColor = ConsoleColor.Black;
+            var tokenLines = token.Split('\n');
+            var lineHead = "";
+            foreach (var line in tokenLines) {
+                Console.Write(lineHead);
+                if (lineHead.Length > 0) {
+                    column = 0;
+                }
+                var words = line.Split(' ');
+                var head = "";
+                foreach (var word in words) {
+                    var columnAfterWrite = column + word.Length + head.Length;
+                    if (columnAfterWrite > width) {
+                        Console.WriteLine();
+                        head = "";
+                        column = word.Length;
+                    }
+                    else {
+                        column = columnAfterWrite;
+                    }
+                    Console.Write(head);
+                    Console.Write(word);
+                    head = " ";
+                }
+                lineHead = "\n";
+            }
+        }
+    }
+
+    public override void Finish()
+    {
+        Console.WriteLine();
     }
 }
