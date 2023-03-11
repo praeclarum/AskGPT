@@ -25,6 +25,8 @@ class Formatter
         ThreeDoubleQuoteInterior,
         ThreeDoubleQuoteInteriorOneDoubleQuote,
         ThreeDoubleQuoteInteriorTwoDoubleQuote,
+        OneSingleQuote,
+        OneSingleQuoteInterior,
         Finished,
     }
 
@@ -39,17 +41,19 @@ class Formatter
         "and", "as", "assert",
         "break",
         "class", "def",
-        "for",
+        "elif", "else", "except",
+        "for", "from",
+        "global", 
         "if", "import", "in", "is",
         "lambda",
         "not",
         "or",
         "return",
-        "while",
+        "try",
+        "while", "with",
     };
-
-    static readonly Dictionary<string, HashSet<string>> keywordsForProgrammingLanguage = new() {
-        { "python", pythonKeywords },
+    static readonly HashSet<string> pythonValwords = new() {
+        "True", "False", "None",
     };
 
     public Formatter() {
@@ -134,7 +138,8 @@ class Formatter
                         Write(tokenText, TokenFormat.Body);
                         break;
                     case ContextType.PythonCode:
-                        Write(tokenText, pythonKeywords.Contains(tokenText) ? TokenFormat.Keyword : TokenFormat.Identifier);
+                        Write(tokenText, pythonKeywords.Contains(tokenText) ? TokenFormat.Keyword 
+                            : (pythonValwords.Contains(tokenText) ? TokenFormat.Valword : TokenFormat.Identifier));
                         break;
                     default:
                         Write(tokenText, TokenFormat.Identifier);
@@ -150,6 +155,8 @@ class Formatter
             case TokenState.ThreeDoubleQuoteInterior:
             case TokenState.ThreeDoubleQuoteInteriorOneDoubleQuote:
             case TokenState.ThreeDoubleQuoteInteriorTwoDoubleQuote:
+            case TokenState.OneSingleQuote:
+            case TokenState.OneSingleQuoteInterior:
                 Write(tokenText, TokenFormat.String);
                 break;            
             case TokenState.OneTick:
@@ -224,6 +231,15 @@ class Formatter
                         case '"':
                             token.Append(ch);
                             state = TokenState.OneDoubleQuote;
+                            break;
+                        case '\'':
+                            if (CurrentContextType >= ContextType.Code) {
+                                token.Append(ch);
+                                state = TokenState.OneSingleQuote;
+                            }
+                            else {
+                                Write("'", TokenFormat.Body);
+                            }
                             break;
                         case '#':
                             token.Append(ch);
@@ -373,6 +389,21 @@ class Formatter
                     state = TokenState.ThreeDoubleQuoteInterior;
                 }
                 return true;
+            case TokenState.OneSingleQuote:
+                token.Append(ch);
+                if (ch == '\'') {
+                    EndToken();
+                }
+                else {
+                    state = TokenState.OneSingleQuoteInterior;
+                }
+                return true;
+            case TokenState.OneSingleQuoteInterior:
+                token.Append(ch);
+                if (ch == '\'') {
+                    EndToken();
+                }
+                return true;
             default:
                 throw new NotImplementedException($"Unknown state {state}");
         }
@@ -386,6 +417,7 @@ enum TokenFormat {
     String,
     Identifier,
     Keyword,
+    Valword,
     Function,
     Punctuation,
     Operator,
@@ -425,6 +457,9 @@ class FormattedWriter
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 break;
             case TokenFormat.String:
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                break;
+            case TokenFormat.Valword:
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 break;
             case TokenFormat.Operator:

@@ -13,6 +13,8 @@ string apiKeyPath = Path.Combine(configDir, "apikey.txt");
 string initialPromptPath = Path.Combine(configDir, "prompt.json");
 string historyPath = Path.Combine(configDir, "history.jsonl");
 
+const int maxHistory = 1000;
+
 //
 // Load the API key
 //
@@ -43,12 +45,16 @@ if (File.Exists(historyPath))
         .ToList();
 }
 
-if (true && history.Count >= 9)
+if (true && history.Count > 61)
 {
-    string lastText = history[^9].Message.Content;
-    var lastFormatter = new Formatter();
-    lastFormatter.Append(lastText);
-    lastFormatter.Finish();
+    for (int i = 1; i <= 61; i += 2)
+    {
+        string lastText = history[^i].Message.Content;
+        var lastFormatter = new Formatter();
+        lastFormatter.Append(lastText);
+        lastFormatter.Finish();
+    }
+    
     return 0;
 }
 
@@ -136,7 +142,7 @@ history.Add(new HistoricMessage()
         Content = responseText,
     }
 });
-history = history.Skip(Math.Max(0, history.Count - 100)).ToList();
+history = history.Skip(Math.Max(0, history.Count - maxHistory)).ToList();
 await File.WriteAllLinesAsync(historyPath, history.Select(message => JsonSerializer.Serialize(message)));
 
 //
