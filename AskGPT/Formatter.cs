@@ -5,14 +5,15 @@ namespace AskGPT;
 class Formatter
 {
     int bracketDepth = 0;
-    TokenState state = TokenState.Trivia;
+    TokenState state = TokenState.WS;
     Stack<ContextType> contextStack = new();
     readonly StringBuilder token = new StringBuilder();
     readonly FormattedWriter writer = new FormattedWriter();
 
     enum TokenState {
         Unknown,
-        Trivia,
+        WS,
+        LineComment,
         Word,
         Number,
         OneTick,
@@ -115,8 +116,11 @@ class Formatter
                 break;
             case TokenState.Finished:
                 break;
-            case TokenState.Trivia:
+            case TokenState.WS:
                 Write(tokenText, TokenFormat.Body);                
+                break;
+            case TokenState.LineComment:
+                Write(tokenText, TokenFormat.Comment);
                 break;
             case TokenState.Word:
                 switch (CurrentContextType) {
@@ -157,7 +161,7 @@ class Formatter
             case TokenState.Unknown:
                 if (char.IsWhiteSpace(ch)) {
                     token.Append(ch);
-                    state = TokenState.Trivia;
+                    state = TokenState.WS;
                 }
                 else if (char.IsDigit(ch)) {
                     token.Append(ch);
@@ -185,9 +189,27 @@ class Formatter
                             Write(ch.ToString(), TokenFormat.Bracket + bracketDepth);
                             bracketDepth--;
                             break;
+                        case '=':
+                        case '+':
+                        case '-':
+                        case '*':
+                        case '/':
+                        case '%':
+                        case '&':
+                        case '|':
+                        case '^':
+                        case '~':
+                        case '<':
+                        case '>':
+                            Write(ch.ToString(), TokenFormat.Operator);
+                            break;
                         case '`':
                             token.Append(ch);
                             state = TokenState.OneTick;
+                            break;
+                        case '#':
+                            token.Append(ch);
+                            state = TokenState.LineComment;
                             break;
                         default:
                             token.Append(ch);
@@ -196,7 +218,7 @@ class Formatter
                     }                    
                 }
                 return true;
-            case TokenState.Trivia:
+            case TokenState.WS:
                 if (char.IsWhiteSpace(ch)) {
                     token.Append(ch);
                     return true;
@@ -204,6 +226,15 @@ class Formatter
                 else {
                     EndToken();
                     return false;
+                }
+            case TokenState.LineComment:
+                if (ch == '\n') {
+                    EndToken();
+                    return false;
+                }
+                else {
+                    token.Append(ch);
+                    return true;
                 }
             case TokenState.Word:
                 if (char.IsLetterOrDigit(ch) || ch == '_') {
@@ -289,6 +320,8 @@ enum TokenFormat {
     Keyword,
     Function,
     Punctuation,
+    Operator,
+    Comment,
     Bracket = 1000,
 }
 
@@ -308,6 +341,9 @@ class FormattedWriter
             case TokenFormat.Body:
                 Console.ResetColor();
                 break;
+            case TokenFormat.Comment:
+                Console.ForegroundColor = ConsoleColor.Gray;
+                break;
             case TokenFormat.Keyword:
                 Console.ForegroundColor = ConsoleColor.Magenta;
                 break;
@@ -319,6 +355,9 @@ class FormattedWriter
                 break;
             case TokenFormat.Number:
                 Console.ForegroundColor = ConsoleColor.Yellow;
+                break;
+            case TokenFormat.Operator:
+                Console.ForegroundColor = ConsoleColor.Gray;
                 break;
             case TokenFormat.Punctuation:
                 Console.ForegroundColor = ConsoleColor.Gray;
