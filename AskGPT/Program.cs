@@ -43,9 +43,9 @@ if (File.Exists(historyPath))
         .ToList();
 }
 
-if (true && history.Count >= 3)
+if (true && history.Count >= 9)
 {
-    string lastText = history[^3].Message.Content;
+    string lastText = history[^9].Message.Content;
     var lastFormatter = new Formatter();
     lastFormatter.Append(lastText);
     lastFormatter.Finish();

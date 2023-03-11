@@ -14,8 +14,15 @@ class Formatter
         Trivia,
         Word,
         Number,
+        OneTick,
+        TwoTick,
+        ThreeTick,
         Finished,
     }
+
+    static readonly Dictionary<string, HashSet<string>> keywordsForProgrammingLanguage = new() {
+        { "python", new() { "class", "def", "if", "import", "return", "while", "for", "break" } },
+    };
     
     public void Append(string markdown)
     {
@@ -48,6 +55,11 @@ class Formatter
             case TokenState.Number:
                 writer.Write(token.ToString(), TokenFormat.Number);
                 break;
+            case TokenState.OneTick:
+            case TokenState.TwoTick:
+            case TokenState.ThreeTick:
+                writer.Write(token.ToString(), TokenFormat.Markdown);
+                break;            
             default:
                 throw new NotImplementedException($"Cannot end state {state}");
         }
@@ -94,6 +106,10 @@ class Formatter
                             writer.Write(ch.ToString(), TokenFormat.Bracket + bracketDepth);
                             bracketDepth--;
                             break;
+                        case '`':
+                            token.Append(ch);
+                            state = TokenState.OneTick;
+                            break;
                         default:
                             token.Append(ch);
                             state = TokenState.Word;
@@ -128,6 +144,35 @@ class Formatter
                     EndToken();
                     return false;
                 }
+            case TokenState.OneTick:
+                if (ch == '`') {
+                    token.Append(ch);
+                    state = TokenState.TwoTick;
+                    return true;
+                }
+                else {
+                    EndToken();
+                    return false;
+                }
+            case TokenState.TwoTick:
+                if (ch == '`') {
+                    token.Append(ch);
+                    state = TokenState.ThreeTick;
+                    return true;
+                }
+                else {
+                    EndToken();
+                    return false;
+                }
+            case TokenState.ThreeTick:
+                token.Append(ch);
+                if (ch == '\n') {
+                    EndToken();
+                    return true;
+                }
+                else {
+                    return true;
+                }
             default:
                 throw new NotImplementedException($"Unknown state {state}");
         }
@@ -135,6 +180,7 @@ class Formatter
 }
 
 enum TokenFormat {
+    Markdown,
     Body,
     Number,
     Punctuation,
@@ -151,13 +197,16 @@ class FormattedWriter
     public void Write(string token, TokenFormat format)
     {
         switch (format) {
+            case TokenFormat.Markdown:
+                Console.ForegroundColor = ConsoleColor.DarkGray;
+                break;
             case TokenFormat.Body:
                 break;
             case TokenFormat.Number:
                 Console.ForegroundColor = ConsoleColor.DarkYellow;
                 break;
             case TokenFormat.Punctuation:
-                Console.ForegroundColor = ConsoleColor.DarkGray;
+                Console.ForegroundColor = ConsoleColor.Gray;
                 break;
             default:
                 if (format >= TokenFormat.Bracket) {
