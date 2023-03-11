@@ -45,9 +45,9 @@ if (File.Exists(historyPath))
         .ToList();
 }
 
-if (true && history.Count > 61)
+if (true && history.Count > 101)
 {
-    for (int i = 1; i <= 61; i += 2)
+    for (int i = 1; i <= 101; i += 2)
     {
         string lastText = history[^i].Message.Content;
         var lastFormatter = new Formatter();
