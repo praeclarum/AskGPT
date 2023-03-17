@@ -4,6 +4,8 @@ using System.Text.Json;
 using AskGPT;
 
 string appName = "AskGPT";
+string cmdName = "ask";
+string modelId = "gpt-3.5-turbo";
 
 string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 string configDir = Path.Combine(homeDir, ".config", "AskGPT");
@@ -71,24 +73,49 @@ var historyToUse = history
 //
 // Parse the prompt from the user
 //
-string prompt = String.Join(" ", args).Trim();
+List<string> promptParts = new();
+for (var i = 0; i < args.Length; i++) {
+    var arg = args[i];
+    if (arg.StartsWith("--") && promptParts.Count == 0) {
+        var option = arg.Substring(2);
+        if (option == "model") {
+            i++;
+            if (i >= args.Length) {
+                Error($"You didn't provide a value for the --{option} option.");
+            }
+            modelId = args[i];
+        }
+        else if (option == "help")
+        {
+            ShowHelp(cmdName);
+            return 0;
+        }
+        else {
+            Error($"Unknown option: {option}");
+        }
+    }
+    else {
+        promptParts.Add(arg);
+    }
+}
+string prompt = string.Join(" ", promptParts);
 if (string.IsNullOrWhiteSpace(prompt))
 {
     Error($"You didn't provide a prompt. Please provide a prompt as the arguments to this program.\n\nFor example:\n\n{appName} Hello, how are you?\n");
 }
+
+//
+// Build the request
+//
 var promptMessage = new Message()
 {
     Role = "user",
     Content = prompt
 };
 DateTimeOffset promptTimestamp = DateTimeOffset.Now;
-
-//
-// Build the request
-//
 var requestData = new Request()
 {
-    ModelId = "gpt-3.5-turbo",
+    ModelId = modelId,
     Messages = initialPrompt.Concat(historyToUse.Select(x => x.Message)).Concat(new[] { promptMessage }).ToArray(),
     Stream = true,
 };
@@ -158,4 +185,15 @@ static void Error(string message)
     Console.WriteLine(message);
     Console.ResetColor();
     Environment.Exit(1);
+}
+
+static void ShowHelp(string cmdName)
+{
+    Console.WriteLine($"Usage: {cmdName} [options] prompt");
+    Console.WriteLine();
+    Console.WriteLine("Options:");
+    Console.WriteLine("  --model <model-id>  The model to use. Defaults to gpt-3.5-turbo.");
+    Console.WriteLine("  --help              Show this help message.");
+    Console.WriteLine();
+    Console.WriteLine($"Provide a prompt as the arguments to this program.\n\nFor example:\n\n{cmdName} What is the meaning of life?");
 }
