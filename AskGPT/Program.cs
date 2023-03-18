@@ -1,6 +1,10 @@
 ﻿/* Script to query ChatGPT from the command line */
 
 using System.Text.Json;
+using System.Text.Json.Serialization;
+
+using OpenAI.ChatGPT;
+
 using AskGPT;
 
 string appName = "AskGPT";
@@ -119,15 +123,14 @@ var requestData = new Request()
     Messages = initialPrompt.Concat(historyToUse.Select(x => x.Message)).Concat(new[] { promptMessage }).ToArray(),
     Stream = true,
 };
-var requestJson = JsonSerializer.Serialize(requestData);
+
 
 //
 // Make the request
 //
 var http = new HttpClient();
-var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
-request.Headers.Add("Authorization", $"Bearer {apiKey}");
-request.Content = new StringContent(requestJson, System.Text.Encoding.UTF8, "application/json");
+var service = new OpenAI.ChatGPT.ChatGPTService(apiKey, http);
+var request = service.CreateHttpRequest(requestData);
 var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 if (!response.IsSuccessStatusCode)
 {
@@ -196,4 +199,12 @@ static void ShowHelp(string cmdName)
     Console.WriteLine("  --help              Show this help message.");
     Console.WriteLine();
     Console.WriteLine($"Provide a prompt as the arguments to this program.\n\nFor example:\n\n{cmdName} What is the meaning of life?");
+}
+
+class HistoricMessage
+{
+    [JsonPropertyName("timestamp")]
+    public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.Now;
+    [JsonPropertyName("message")]
+    public Message Message { get; set; } = new();
 }
