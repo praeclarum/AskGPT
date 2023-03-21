@@ -91,11 +91,31 @@ for (var i = 0; i < args.Length; i++) {
         }
         else if (option == "help")
         {
-            ShowHelp(cmdName);
+            ShowHelp();
+            return 0;
+        }
+        else if (option == "version")
+        {
+            ShowVersion();
             return 0;
         }
         else {
             Error($"Unknown option: {option}");
+        }
+    }
+    if (arg.StartsWith("-") && promptParts.Count == 0) {
+        foreach (var c in arg.Substring(1)) {
+            switch (c) {
+                case 'h':
+                    ShowHelp();
+                    return 0;
+                case 'v':
+                    ShowVersion();
+                    return 0;
+                default:
+                    Error($"Unknown option: {c}");
+                    break;
+            }
         }
     }
     else {
@@ -190,15 +210,23 @@ static void Error(string message)
     Environment.Exit(1);
 }
 
-static void ShowHelp(string cmdName)
+void ShowHelp()
 {
     Console.WriteLine($"Usage: {cmdName} [options] prompt");
     Console.WriteLine();
     Console.WriteLine("Options:");
     Console.WriteLine("  --model <model-id>  The model to use. Defaults to gpt-3.5-turbo.");
-    Console.WriteLine("  --help              Show this help message.");
+    Console.WriteLine("  -h, --help          Show this help message.");
+    Console.WriteLine("  -v, --version       Show the version of this program.");
     Console.WriteLine();
-    Console.WriteLine($"Provide a prompt as the arguments to this program.\n\nFor example:\n\n{cmdName} What is the meaning of life?");
+    Console.WriteLine($"Provide a prompt as the arguments to this program.\n\nFor example:\n\n{cmdName} \"What is the meaning of life?\"");
+}
+
+void ShowVersion()
+{
+    var asm = System.Reflection.Assembly.GetExecutingAssembly();
+    var version = asm.GetName().Version;
+    Console.WriteLine($"{appName} version: {version}");
 }
 
 class HistoricMessage
