@@ -259,7 +259,7 @@ class Formatter
                         case ']':
                         case '}':
                             Write(ch.ToString(), TokenFormat.Bracket + bracketDepth);
-                            bracketDepth--;
+                            bracketDepth = Math.Max(0, bracketDepth - 1);
                             break;
                         case '=':
                         case '+':
@@ -553,6 +553,8 @@ class ConsoleWriter : FormattedWriter
     {
         switch (format) {
             case TokenFormat.Markdown:
+                // Console.ForegroundColor = ConsoleColor.DarkGray;
+                // break;
                 return;
             case TokenFormat.Body:
                 Console.ResetColor();
