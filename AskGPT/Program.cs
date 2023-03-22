@@ -9,7 +9,6 @@ using AskGPT;
 
 string appName = "AskGPT";
 string cmdName = "ask";
-string modelId = "gpt-3.5-turbo";
 
 string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 string configDir = Path.Combine(homeDir, ".config", "AskGPT");
@@ -18,6 +17,7 @@ Directory.CreateDirectory(configDir);
 string apiKeyPath = Path.Combine(configDir, "apikey.txt");
 string initialPromptPath = Path.Combine(configDir, "prompt.json");
 string historyPath = Path.Combine(configDir, "history.jsonl");
+string configFilePath = Path.Combine(configDir, "config.json");
 
 const int maxHistory = 1000;
 
@@ -29,6 +29,18 @@ if (!File.Exists(apiKeyPath))
     Error($"No API key found. Please put your API key in a file located at:\n\n{apiKeyPath}\n\nYou can get your API key from:\n\nhttps://platform.openai.com/account/api-keys\n");
 }
 string apiKey = (await File.ReadAllTextAsync(apiKeyPath)).Trim();
+
+//
+// Load the config file
+//
+Config config = new();
+if (File.Exists(configFilePath))
+{
+    if (JsonSerializer.Deserialize<Config>(await File.ReadAllTextAsync(configFilePath)) is Config loadedConfig)
+    {
+        config = loadedConfig;
+    }
+}
 
 //
 // Load the initial prompt used to prime the network
@@ -87,7 +99,7 @@ for (var i = 0; i < args.Length; i++) {
             if (i >= args.Length) {
                 Error($"You didn't provide a value for the --{option} option.");
             }
-            modelId = args[i];
+            config.ModelId = args[i];
         }
         else if (option == "help")
         {
@@ -103,7 +115,7 @@ for (var i = 0; i < args.Length; i++) {
             Error($"Unknown option: {option}");
         }
     }
-    if (arg.StartsWith("-") && promptParts.Count == 0) {
+    else if (arg.StartsWith("-") && promptParts.Count == 0) {
         foreach (var c in arg.Substring(1)) {
             switch (c) {
                 case 'h':
@@ -139,7 +151,7 @@ var promptMessage = new Message()
 DateTimeOffset promptTimestamp = DateTimeOffset.Now;
 var requestData = new Request()
 {
-    ModelId = modelId,
+    ModelId = config.ModelId,
     Messages = initialPrompt.Concat(historyToUse.Select(x => x.Message)).Concat(new[] { promptMessage }).ToArray(),
     Stream = true,
 };
@@ -198,6 +210,11 @@ history = history.Skip(Math.Max(0, history.Count - maxHistory)).ToList();
 await File.WriteAllLinesAsync(historyPath, history.Select(message => JsonSerializer.Serialize(message)));
 
 //
+// Save the config
+//
+await File.WriteAllTextAsync(configFilePath, JsonSerializer.Serialize(config));
+
+//
 // Fini
 //
 return 0;
@@ -227,6 +244,7 @@ void ShowVersion()
     var asm = System.Reflection.Assembly.GetExecutingAssembly();
     var version = asm.GetName().Version;
     Console.WriteLine($"{appName} version: {version}");
+    Console.WriteLine($"Model: {config.ModelId}");
 }
 
 class HistoricMessage
@@ -235,4 +253,9 @@ class HistoricMessage
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.Now;
     [JsonPropertyName("message")]
     public Message Message { get; set; } = new();
+}
+
+class Config
+{
+    public string ModelId { get; set; } = "gpt-3.5-turbo";
 }
