@@ -7,6 +7,7 @@ class Formatter
     int bracketDepth = 0;
     TokenState state = TokenState.WS;
     readonly Stack<FormatContext> contextStack = new();
+    readonly Stack<int> bracketDepthStack = new();
     readonly StringBuilder token = new StringBuilder();
     readonly FormattedWriter writer = new ConsoleWriter();
 
@@ -114,11 +115,14 @@ class Formatter
     void BeginContext(FormatContext contextType)
     {
         contextStack.Push(contextType);
+        bracketDepthStack.Push(bracketDepth);
+        bracketDepth = 0;
         writer.BeginContext(contextType);
     }
     void EndContext()
     {
         contextStack.Pop();
+        bracketDepth = bracketDepthStack.Pop();
         writer.EndContext();
     }
     FormatContext CurrentContextType => contextStack.Peek();
