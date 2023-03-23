@@ -104,7 +104,7 @@ class Formatter
     {
         if (state != TokenState.Finished) {
             EndToken();
-            FlushWriteBuffer();
+            FlushWriteBuffer(GetStyle());
             while (contextStack.Count > 1) {
                 EndContext();
             }
@@ -117,8 +117,13 @@ class Formatter
     {
         contextStack.Push(contextType);
         bracketDepthStack.Push(bracketDepth);
-        bracketDepth = 0;
         writer.BeginContext(contextType);
+    }
+    void EndContext()
+    {
+        contextStack.Pop();
+        bracketDepth = bracketDepthStack.Pop();
+        writer.EndContext();
     }
     void EndContext(FormatContext upToContextType)
     {
@@ -129,12 +134,6 @@ class Formatter
                 break;
             }
         }
-    }
-    void EndContext()
-    {
-        contextStack.Pop();
-        bracketDepth = bracketDepthStack.Pop();
-        writer.EndContext();
     }
     FormatContext CurrentContextType => contextStack.Peek();
 
@@ -148,30 +147,50 @@ class Formatter
 
     void Write(string text, TokenFormat format)
     {
-        if (format == TokenFormat.Identifier) {
+        var style = GetStyle();
+        if (format == TokenFormat.Identifier)
+        {
             writeBuffer.Add((text, format));
         }
-        else if (text == ".") {
+        else if (text == ".")
+        {
             writeBuffer.Add((text, format));
         }
-        else if (text == "(" && writeBuffer.Count > 0 && writeBuffer[^1].format == TokenFormat.Identifier) {
+        else if (text == "(" && writeBuffer.Count > 0 && writeBuffer[^1].format == TokenFormat.Identifier)
+        {
             var (lastText, lastFormat) = writeBuffer[^1];
             writeBuffer[^1] = (lastText, TokenFormat.Function);
-            FlushWriteBuffer();
-            writer.Write(text, format);
+            FlushWriteBuffer(style);
+            writer.Write(text, format, style);
         }
-        else {
-            FlushWriteBuffer();
-            writer.Write(text, format);
+        else
+        {
+            FlushWriteBuffer(style);
+            writer.Write(text, format, style);
         }
     }
 
-    void FlushWriteBuffer()
+    void FlushWriteBuffer(TokenStyle style)
     {
         foreach (var (text, format) in writeBuffer) {
-            writer.Write(text, format);
+            writer.Write(text, format, style);
         }
         writeBuffer.Clear();
+    }
+
+    TokenStyle GetStyle()
+    {
+        var s = TokenStyle.None;
+        if (InContext(FormatContext.Bold)) {
+            s |= TokenStyle.Bold;
+        }
+        else if (InContext(FormatContext.Italic)) {
+            s |= TokenStyle.Italic;
+        }
+        else if (InContext(FormatContext.Underline)) {
+            s |= TokenStyle.Italic;
+        }
+        return s;
     }
 
     void EndToken()
@@ -201,9 +220,6 @@ class Formatter
                     else {
                         Write(tokenText, TokenFormat.Identifier);
                     }
-                }
-                else if (InContext(FormatContext.Bold)) {
-                    Write(tokenText, TokenFormat.Bold);
                 }
                 else {
                     Write(tokenText, TokenFormat.Body);
@@ -508,13 +524,21 @@ class Formatter
             case TokenState.OneStar:
                 if (ch == '*') {
                     token.Append(ch);
-                    EndToken();
                     if (InContext(FormatContext.Bold)) {
                         EndContext(FormatContext.Bold);
+                        EndToken();
                     }
                     else {
+                        EndToken();
                         BeginContext(FormatContext.Bold);
                     }
+                    return true;
+                }
+                else if (char.IsWhiteSpace(ch)) {
+                    Write("*", TokenFormat.Operator);
+                    token.Clear();
+                    token.Append(ch);
+                    state = TokenState.WS;
                     return true;
                 }
                 else {
@@ -536,8 +560,6 @@ class Formatter
 enum TokenFormat {
     Markdown,
     Body,
-    Bold,
-    Italic,
     Underline,
     Number,
     String,
@@ -551,10 +573,20 @@ enum TokenFormat {
     Bracket = 1000,
 }
 
+[Flags]
+enum TokenStyle {
+    None = 0,
+    Bold = 0x1,
+    Dimmed = 0x2,
+    Italic = 0x4,
+    Underline = 0x8,
+}
+
 enum FormatContext {
     Text,
-    Italic,
     Bold,
+    Italic,
+    Underline,
     InlineCode,
     Code = 1000,
     CSharpCode,
@@ -589,7 +621,7 @@ abstract class FormattedWriter
         contextStack.Pop();
     }
     public FormatContext CurrentContextType => contextStack.Peek();
-    public abstract void Write(string token, TokenFormat format);
+    public abstract void Write(string token, TokenFormat format, TokenStyle style);
     public virtual void Finish() {}
 }
 
@@ -597,26 +629,42 @@ class ConsoleWriter : FormattedWriter
 {
     readonly int width = Console.WindowWidth;
     int column = 0;
+    const bool showMarkdown = true;
     ConsoleColor[] bracketColors = new ConsoleColor[] {
         ConsoleColor.DarkYellow,
         ConsoleColor.DarkMagenta,
         ConsoleColor.DarkCyan
     };
-    public override void Write(string token, TokenFormat format)
+    public override void Write(string token, TokenFormat format, TokenStyle style)
     {
         var needsResetAfter = false;
+        if (style.HasFlag(TokenStyle.Bold)) {
+            Console.Write("\u001B[1m");
+            needsResetAfter = true;
+        }
+        if (style.HasFlag(TokenStyle.Dimmed)) {
+            Console.Write("\u001B[2m");
+            needsResetAfter = true;
+        }
+        if (style.HasFlag(TokenStyle.Italic)) {
+            Console.Write("\u001B[3m");
+            needsResetAfter = true;
+        }
+        if (style.HasFlag(TokenStyle.Underline)) {
+            Console.Write("\u001B[4m");
+            needsResetAfter = true;
+        }
         switch (format) {
             case TokenFormat.Markdown:
-                // Console.ForegroundColor = ConsoleColor.DarkGray;
-                // break;
-                return;
+                if (showMarkdown) {
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    break;
+                }
+                else {
+                    return;
+                }
             case TokenFormat.Body:
                 Console.ResetColor();
-                break;
-            case TokenFormat.Bold:
-                Console.ResetColor();
-                Console.Write("\u001B[1m");
-                needsResetAfter = true;
                 break;
             case TokenFormat.Comment:
                 Console.ForegroundColor = ConsoleColor.Gray;

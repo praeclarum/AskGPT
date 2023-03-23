@@ -20,7 +20,7 @@ string historyPath = Path.Combine(configDir, "history.jsonl");
 string configFilePath = Path.Combine(configDir, "config.json");
 
 const int maxHistory = 1000;
-const bool testFormatter = false;
+const bool testFormatter = true;
 
 //
 // Load the API key
