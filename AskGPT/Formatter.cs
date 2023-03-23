@@ -11,9 +11,21 @@ class Formatter
     readonly StringBuilder token = new StringBuilder();
     readonly FormattedWriter writer = new ConsoleWriter();
 
+    List<(string text, TokenFormat format)> writeBuffer = new();
+
+    FormatContext CurrentContextType => contextStack.Peek();
+
+    bool InContext(FormatContext c) => contextStack.Contains(c);
+    bool InCodeBlock => contextStack.Any(c => c.IsCodeBlock());
+    bool InCodeish => contextStack.Any(c => c.IsCodeish());
+    bool InCFamilyCode => InContext(FormatContext.CSharpCode);
+    bool InUnixScriptCode => InContext(FormatContext.PythonCode);
+
     enum TokenState {
         Unknown,
         WS,
+        OneNewline,
+        ManyNewline,
         LineComment,
         Word,
         Number,
@@ -89,6 +101,7 @@ class Formatter
 
     public Formatter() {
         contextStack.Push(FormatContext.Text);
+        bracketDepthStack.Push(0);
     }
     
     public void Append(string markdown)
@@ -135,15 +148,12 @@ class Formatter
             }
         }
     }
-    FormatContext CurrentContextType => contextStack.Peek();
 
-    bool InContext(FormatContext c) => contextStack.Contains(c);
-    bool InCodeBlock => contextStack.Any(c => c.IsCodeBlock());
-    bool InCodeish => contextStack.Any(c => c.IsCodeish());
-    bool InCFamilyCode => InContext(FormatContext.CSharpCode);
-    bool InUnixScriptCode => InContext(FormatContext.PythonCode);
-
-    List<(string text, TokenFormat format)> writeBuffer = new();
+    void BeginParagraph()
+    {
+        // Reset the bracket depth
+        bracketDepth = 0;
+    }
 
     void Write(string text, TokenFormat format)
     {
@@ -202,6 +212,10 @@ class Formatter
             case TokenState.Finished:
                 break;
             case TokenState.WS:
+                Write(tokenText, TokenFormat.Body);                
+                break;
+            case TokenState.OneNewline:
+            case TokenState.ManyNewline:
                 Write(tokenText, TokenFormat.Body);                
                 break;
             case TokenState.LineComment:
@@ -265,7 +279,11 @@ class Formatter
             case TokenState.Finished:
                 return true;
             case TokenState.Unknown:
-                if (char.IsWhiteSpace(ch)) {
+                if (ch == '\n') {
+                    token.Append(ch);
+                    state = TokenState.OneNewline;
+                }
+                else if (char.IsWhiteSpace(ch)) {
                     token.Append(ch);
                     state = TokenState.WS;
                 }
@@ -308,12 +326,12 @@ class Formatter
                             Write(ch.ToString(), TokenFormat.Operator);
                             break;
                         case '*':
-                            if (InCodeish) {
-                                Write(ch.ToString(), TokenFormat.Operator);
-                            }
-                            else {
+                            if (InContext(FormatContext.Bold) || InContext(FormatContext.Italic)) {
                                 token.Append(ch);
                                 state = TokenState.OneStar;
+                            }
+                            else {
+                                Write(ch.ToString(), TokenFormat.Operator);
                             }
                             break;
                         case '`':
@@ -354,12 +372,66 @@ class Formatter
                 }
                 return true;
             case TokenState.WS:
-                if (char.IsWhiteSpace(ch)) {
+                if (ch == '\n') {
+                    token.Append(ch);
+                    state = TokenState.OneNewline;
+                    return true;
+                }
+                else if (ch == '*') {
+                    EndToken();
+                    if (InCodeish) {
+                        return false;
+                    }
+                    token.Append(ch);
+                    state = TokenState.OneStar;
+                    return true;
+                }
+                else if (char.IsWhiteSpace(ch)) {
                     token.Append(ch);
                     return true;
                 }
                 else {
                     EndToken();
+                    return false;
+                }
+            case TokenState.OneNewline:
+                if (ch == '\n') {
+                    token.Append(ch);
+                    state = TokenState.ManyNewline;
+                    return true;
+                }
+                else if (ch == '*') {
+                    EndToken();
+                    if (InCodeish) {
+                        return false;
+                    }
+                    token.Append(ch);
+                    state = TokenState.OneStar;
+                    return true;
+                }
+                else {
+                    EndToken();
+                    return false;
+                }
+            case TokenState.ManyNewline:
+                if (ch == '\n') {
+                    token.Append(ch);
+                    return true;
+                }
+                else if (ch == '*') {
+                    EndToken();
+                    if (InCodeish) {
+                        return false;
+                    }
+                    token.Append(ch);
+                    state = TokenState.OneStar;
+                    return true;
+                }
+                else {
+                    EndToken();
+                    if (!InCodeish) {
+                        BeginParagraph();
+                    }
                     return false;
                 }
             case TokenState.LineComment:
