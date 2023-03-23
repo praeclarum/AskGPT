@@ -28,6 +28,7 @@ class Formatter
         ManyNewline,
         LineComment,
         Word,
+        Url,
         Number,
         OneTick,
         TwoTick,
@@ -239,6 +240,9 @@ class Formatter
                     Write(tokenText, TokenFormat.Body);
                 }
                 break;
+            case TokenState.Url:
+                Write(tokenText, TokenFormat.Url);
+                break;
             case TokenState.Number:
                 Write(tokenText, TokenFormat.Number);
                 break;
@@ -448,6 +452,24 @@ class Formatter
                     token.Append(ch);
                     return true;
                 }
+                else if (ch == ':' && !InCodeish && token.ToString() is string word &&
+                        (word.Equals("http", StringComparison.OrdinalIgnoreCase) ||
+                         word.Equals("https", StringComparison.OrdinalIgnoreCase) ||
+                         word.Equals("ftp", StringComparison.OrdinalIgnoreCase) ||
+                         word.Equals("file", StringComparison.OrdinalIgnoreCase))) {
+                    token.Append(ch);
+                    state = TokenState.Url;
+                    return true;
+                }
+                else {
+                    EndToken();
+                    return false;
+                }
+            case TokenState.Url:
+                if (char.IsLetterOrDigit(ch) || ch == '/' || ch == ':' || ch == '?' || ch == '&' || ch == '=' || ch == '#' || ch == '.' || ch == ',' || ch == ';' || ch == '!' || ch == '-' || ch == '_' || ch == '~' || ch == '%' || ch == '*' || ch == '\'' || ch == '+' || ch == '@' || ch == '$' || ch == '^' || ch == '|' || ch == '`' || ch == '<' || ch == '>' || ch == '\\') {
+                    token.Append(ch);
+                    return true;
+                }
                 else {
                     EndToken();
                     return false;
@@ -632,6 +654,7 @@ class Formatter
 enum TokenFormat {
     Markdown,
     Body,
+    Url,
     Underline,
     Number,
     String,
@@ -749,6 +772,11 @@ class ConsoleWriter : FormattedWriter
                 break;
             case TokenFormat.Function:
                 Console.ForegroundColor = ConsoleColor.Green;
+                break;
+            case TokenFormat.Url:
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.Write("\u001B[4m");
+                needsResetAfter = true;
                 break;
             case TokenFormat.Number:
                 Console.ForegroundColor = ConsoleColor.Yellow;
