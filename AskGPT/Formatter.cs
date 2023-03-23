@@ -29,6 +29,7 @@ class Formatter
         OneSingleQuote,
         OneSingleQuoteInterior,
         OneForwardSlash,
+        OneStar,
         Finished,
     }
 
@@ -119,6 +120,16 @@ class Formatter
         bracketDepth = 0;
         writer.BeginContext(contextType);
     }
+    void EndContext(FormatContext upToContextType)
+    {
+        while (contextStack.Count > 1) {
+            var t = contextStack.Peek();
+            EndContext();
+            if (t == upToContextType) {
+                break;
+            }
+        }
+    }
     void EndContext()
     {
         contextStack.Pop();
@@ -127,10 +138,11 @@ class Formatter
     }
     FormatContext CurrentContextType => contextStack.Peek();
 
-    bool InCode => CurrentContextType == FormatContext.Code;
-    bool InCodeish => CurrentContextType >= FormatContext.Code;
-    bool InCFamilyCode => CurrentContextType == FormatContext.CSharpCode;
-    bool InUnixScriptCode => CurrentContextType == FormatContext.PythonCode;
+    bool InContext(FormatContext c) => contextStack.Contains(c);
+    bool InCodeBlock => contextStack.Any(c => c.IsCodeBlock());
+    bool InCodeish => contextStack.Any(c => c.IsCodeish());
+    bool InCFamilyCode => InContext(FormatContext.CSharpCode);
+    bool InUnixScriptCode => InContext(FormatContext.PythonCode);
 
     List<(string text, TokenFormat format)> writeBuffer = new();
 
@@ -177,25 +189,24 @@ class Formatter
                 Write(tokenText, TokenFormat.Comment);
                 break;
             case TokenState.Word:
-                switch (CurrentContextType) {
-                    case FormatContext.Text:
-                        Write(tokenText, TokenFormat.Body);
-                        break;
-                    case FormatContext.Code:
-                        Write(tokenText, codeKeywords.Contains(tokenText) ? TokenFormat.Keyword 
-                            : (codeValwords.Contains(tokenText) ? TokenFormat.Valword : TokenFormat.Identifier));
-                        break;
-                    case FormatContext.CSharpCode:
+                if (InCodeish) {
+                    if (InContext(FormatContext.CSharpCode)) {
                         Write(tokenText, csharpKeywords.Contains(tokenText) ? TokenFormat.Keyword 
                             : (csharpValwords.Contains(tokenText) ? TokenFormat.Valword : TokenFormat.Identifier));
-                        break;
-                    case FormatContext.PythonCode:
+                    }
+                    else if (InContext(FormatContext.PythonCode)) {
                         Write(tokenText, pythonKeywords.Contains(tokenText) ? TokenFormat.Keyword 
-                            : (pythonValwords.Contains(tokenText) ? TokenFormat.Valword : TokenFormat.Identifier));
-                        break;
-                    default:
+                            : (pythonValwords.Contains(tokenText) ? TokenFormat.Valword : TokenFormat.Identifier));                        
+                    }
+                    else {
                         Write(tokenText, TokenFormat.Identifier);
-                        break;
+                    }
+                }
+                else if (InContext(FormatContext.Bold)) {
+                    Write(tokenText, TokenFormat.Bold);
+                }
+                else {
+                    Write(tokenText, TokenFormat.Body);
                 }
                 break;
             case TokenState.Number:
@@ -218,6 +229,9 @@ class Formatter
                 break;
             case TokenState.OneForwardSlash:
                 Write(tokenText, TokenFormat.Operator);
+                break;
+            case TokenState.OneStar:
+                Write(tokenText, TokenFormat.Markdown);
                 break;
             default:
                 throw new NotImplementedException($"Cannot end state {state}");
@@ -268,7 +282,6 @@ class Formatter
                         case '=':
                         case '+':
                         case '-':
-                        case '*':
                         case '%':
                         case '&':
                         case '|':
@@ -277,6 +290,15 @@ class Formatter
                         case '<':
                         case '>':
                             Write(ch.ToString(), TokenFormat.Operator);
+                            break;
+                        case '*':
+                            if (InCodeish) {
+                                Write(ch.ToString(), TokenFormat.Operator);
+                            }
+                            else {
+                                token.Append(ch);
+                                state = TokenState.OneStar;
+                            }
                             break;
                         case '`':
                             token.Append(ch);
@@ -300,7 +322,7 @@ class Formatter
                             }
                             break;
                         case '#':
-                            if (InUnixScriptCode || InCode) {
+                            if (InUnixScriptCode || InCodeBlock) {
                                 token.Append(ch);
                                 state = TokenState.LineComment;
                             }
@@ -359,8 +381,8 @@ class Formatter
                 }
                 else {
                     EndToken();
-                    if (CurrentContextType == FormatContext.InlineCode) {
-                        EndContext();
+                    if (InContext(FormatContext.InlineCode)) {
+                        EndContext(FormatContext.InlineCode);
                     }
                     else {
                         BeginContext(FormatContext.InlineCode);
@@ -474,7 +496,7 @@ class Formatter
                 }
                 return true;
             case TokenState.OneForwardSlash:
-                if (ch == '/' && (InCFamilyCode || InCode)) {
+                if (ch == '/' && (InCFamilyCode || InCodeBlock)) {
                     token.Append(ch);
                     state = TokenState.LineComment;
                 }
@@ -483,6 +505,28 @@ class Formatter
                     return false;
                 }
                 return true;
+            case TokenState.OneStar:
+                if (ch == '*') {
+                    token.Append(ch);
+                    EndToken();
+                    if (InContext(FormatContext.Bold)) {
+                        EndContext(FormatContext.Bold);
+                    }
+                    else {
+                        BeginContext(FormatContext.Bold);
+                    }
+                    return true;
+                }
+                else {
+                    EndToken();
+                    if (InContext(FormatContext.Italic)) {
+                        EndContext(FormatContext.Italic);
+                    }
+                    else {
+                        BeginContext(FormatContext.Italic);
+                    }
+                    return false;
+                }
             default:
                 throw new NotImplementedException($"Unknown state {state}");
         }
@@ -492,6 +536,9 @@ class Formatter
 enum TokenFormat {
     Markdown,
     Body,
+    Bold,
+    Italic,
+    Underline,
     Number,
     String,
     Identifier,
@@ -506,6 +553,8 @@ enum TokenFormat {
 
 enum FormatContext {
     Text,
+    Italic,
+    Bold,
     InlineCode,
     Code = 1000,
     CSharpCode,
@@ -516,11 +565,11 @@ static class FormatContextExtensions
 {
     public static bool IsCodeish(this FormatContext contextType)
     {
-        return contextType >= FormatContext.Code;
+        return contextType >= FormatContext.Code || contextType == FormatContext.InlineCode;
     }
-    public static bool IsCode(this FormatContext contextType)
+    public static bool IsCodeBlock(this FormatContext contextType)
     {
-        return contextType == FormatContext.Code;
+        return contextType >= FormatContext.Code;
     }
 }
 
@@ -555,6 +604,7 @@ class ConsoleWriter : FormattedWriter
     };
     public override void Write(string token, TokenFormat format)
     {
+        var needsResetAfter = false;
         switch (format) {
             case TokenFormat.Markdown:
                 // Console.ForegroundColor = ConsoleColor.DarkGray;
@@ -562,6 +612,11 @@ class ConsoleWriter : FormattedWriter
                 return;
             case TokenFormat.Body:
                 Console.ResetColor();
+                break;
+            case TokenFormat.Bold:
+                Console.ResetColor();
+                Console.Write("\u001B[1m");
+                needsResetAfter = true;
                 break;
             case TokenFormat.Comment:
                 Console.ForegroundColor = ConsoleColor.Gray;
@@ -600,7 +655,7 @@ class ConsoleWriter : FormattedWriter
                 }
                 break;
         }
-        if (CurrentContextType.IsCodeish()) {
+        if (CurrentContextType.IsCodeBlock()) {
             // Console.BackgroundColor = ConsoleColor.DarkGray;
             var newlineIndex = token.LastIndexOf('\n');
             column = newlineIndex >= 0 ? token.Length - newlineIndex - 1 : column + token.Length;
@@ -632,6 +687,9 @@ class ConsoleWriter : FormattedWriter
                     head = " ";
                 }
                 lineHead = "\n";
+            }
+            if (needsResetAfter) {
+                Console.Write("\u001B[0m");
             }
         }
     }
