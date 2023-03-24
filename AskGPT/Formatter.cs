@@ -30,6 +30,7 @@ class Formatter
         Word,
         Url,
         Number,
+        NumberWithDot,
         OneTick,
         TwoTick,
         ThreeTick,
@@ -244,6 +245,7 @@ class Formatter
                 Write(tokenText, TokenFormat.Url);
                 break;
             case TokenState.Number:
+            case TokenState.NumberWithDot:
                 Write(tokenText, TokenFormat.Number);
                 break;
             case TokenState.OneDoubleQuote:
@@ -475,6 +477,20 @@ class Formatter
                     return false;
                 }
             case TokenState.Number:
+                if (char.IsDigit(ch)) {
+                    token.Append(ch);
+                    return true;
+                }
+                else if (ch == '.') {
+                    token.Append(ch);
+                    state = TokenState.NumberWithDot;
+                    return true;
+                }
+                else {
+                    EndToken();
+                    return false;
+                }
+            case TokenState.NumberWithDot:
                 if (char.IsDigit(ch)) {
                     token.Append(ch);
                     return true;
@@ -724,7 +740,7 @@ class ConsoleWriter : FormattedWriter
 {
     readonly int width = Console.WindowWidth;
     int column = 0;
-    const bool showMarkdown = true;
+    const bool showMarkdown = false;
     ConsoleColor[] bracketColors = new ConsoleColor[] {
         ConsoleColor.DarkYellow,
         ConsoleColor.DarkMagenta,

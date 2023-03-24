@@ -20,7 +20,7 @@ string historyPath = Path.Combine(configDir, "history.jsonl");
 string configFilePath = Path.Combine(configDir, "config.json");
 
 const int maxHistory = 1000;
-const bool testFormatter = true;
+const bool testFormatter = false;
 
 //
 // Load the API key
@@ -69,7 +69,7 @@ if (File.Exists(historyPath))
 //
 if (testFormatter && history.Count > 101)
 {
-    for (int i = 1; i <= 61; i += 2)
+    for (int i = 1; i <= 101; i += 2)
     {
         string lastText = history[^i].Message.Content;
         var lastFormatter = new Formatter();
