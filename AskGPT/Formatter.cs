@@ -53,7 +53,7 @@ class Formatter
     static readonly HashSet<string> csharpKeywords = new() {
         "and", "as",
         "break", "byte",
-        "case", "catch", "class",
+        "case", "catch", "class", "continue",
         "do", "double",
         "else",
         "finally", "float", "for", "from",
@@ -76,7 +76,8 @@ class Formatter
     static readonly HashSet<string> pythonKeywords = new() {
         "and", "as", "assert",
         "break",
-        "class", "def",
+        "class", "continue",
+        "def",
         "elif", "else", "except",
         "for", "from",
         "global", 
